@@ -1,0 +1,367 @@
+// ============================================================
+// main.js - 게임 엔진 핵심: 장면 렌더링, 선택 처리, 진행 관리
+// ============================================================
+
+// ──────────────────────────────────────────────
+// DOM 참조
+// ──────────────────────────────────────────────
+const els = {
+  screen:       () => document.getElementById('game-screen'),
+  titleEl:      () => document.getElementById('ep-title'),
+  charBadge:    () => document.getElementById('char-badge'),
+  speakerEl:    () => document.getElementById('speaker-name'),
+  textEl:       () => document.getElementById('scene-text'),
+  choicesEl:    () => document.getElementById('choices'),
+  immediateEl:  () => document.getElementById('immediate-result'),
+  episodeNav:   () => document.getElementById('episode-nav'),
+  // 디버그 패널
+  dbWorld:      () => document.getElementById('db-world'),
+  dbFlags:      () => document.getElementById('db-flags'),
+  dbHistory:    () => document.getElementById('db-history'),
+  // 화면
+  startScreen:  () => document.getElementById('start-screen'),
+  gameScreen:   () => document.getElementById('game-wrapper'),
+  endingScreen: () => document.getElementById('ending-screen'),
+  endTitle:     () => document.getElementById('ending-title'),
+  endSubtitle:  () => document.getElementById('ending-subtitle'),
+  endSummary:   () => document.getElementById('ending-summary'),
+  endDetails:   () => document.getElementById('ending-details'),
+  endingBar:    () => document.getElementById('ending-color-bar'),
+};
+
+// ──────────────────────────────────────────────
+// 배경 테마 매핑
+// ──────────────────────────────────────────────
+const BG_THEMES = {
+  city:       'linear-gradient(135deg, #0d1b2a 0%, #1b2838 60%, #0a0e1a 100%)',
+  school:     'linear-gradient(135deg, #1a2744 0%, #2d3a5e 60%, #0f1e33 100%)',
+  office:     'linear-gradient(135deg, #1c1c2e 0%, #2d2d44 60%, #0f0f1e 100%)',
+  control:    'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)',
+  server:     'linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 60%, #16213e 100%)',
+  courtroom:  'linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 60%, #0f0a1e 100%)',
+};
+
+// ──────────────────────────────────────────────
+// 초기화
+// ──────────────────────────────────────────────
+function init() {
+  document.getElementById('btn-new-game').addEventListener('click', startNewGame);
+  document.getElementById('btn-load-game').addEventListener('click', loadAndStart);
+  document.getElementById('btn-save').addEventListener('click', handleSave);
+  document.getElementById('btn-reset').addEventListener('click', handleReset);
+  document.getElementById('btn-toggle-debug').addEventListener('click', toggleDebug);
+  document.getElementById('btn-restart').addEventListener('click', () => location.reload());
+
+  // 저장 데이터 있으면 불러오기 버튼 활성화
+  if (localStorage.getItem('mind_game_save')) {
+    document.getElementById('btn-load-game').disabled = false;
+    document.getElementById('load-hint').textContent = '저장된 데이터가 있습니다.';
+  }
+}
+
+function startNewGame() {
+  resetGame();
+  showGameScreen();
+  goToEpisode('prologue');
+}
+
+function loadAndStart() {
+  if (loadGame()) {
+    showGameScreen();
+    const ep = gameProgress.currentEpisode;
+    const sc = gameProgress.currentScene;
+    goToEpisode(ep, sc);
+  } else {
+    alert('저장 데이터를 불러올 수 없습니다.');
+  }
+}
+
+function showGameScreen() {
+  els.startScreen().style.display = 'none';
+  els.gameScreen().style.display = 'grid';
+  els.endingScreen().style.display = 'none';
+}
+
+// ──────────────────────────────────────────────
+// 에피소드 진입
+// ──────────────────────────────────────────────
+function goToEpisode(epId, sceneIndex = 0) {
+  const ep = EPISODES[epId];
+  if (!ep) { showEnding(); return; }
+
+  gameProgress.currentEpisode = epId;
+  gameProgress.currentScene = sceneIndex;
+
+  // 배경 테마
+  const bg = BG_THEMES[ep.bgTheme] || BG_THEMES.city;
+  document.getElementById('bg-layer').style.background = bg;
+
+  // 에피소드 제목 & 캐릭터 뱃지
+  els.titleEl().textContent = ep.title;
+  const char = ep.character;
+  els.charBadge().textContent = `${char.name} · ${char.role}`;
+  els.charBadge().style.background = char.color + '22';
+  els.charBadge().style.color = char.color;
+  els.charBadge().style.borderColor = char.color + '44';
+
+  updateEpisodeNav(epId);
+  renderScene(ep, sceneIndex);
+}
+
+// ──────────────────────────────────────────────
+// 장면 렌더링
+// ──────────────────────────────────────────────
+function renderScene(ep, sceneIndex) {
+  const scene = ep.scenes[sceneIndex];
+  if (!scene) return;
+
+  gameProgress.currentScene = sceneIndex;
+
+  // 즉시 결과 초기화
+  els.immediateEl().textContent = '';
+  els.immediateEl().style.opacity = '0';
+
+  // 화자
+  if (scene.speaker) {
+    els.speakerEl().textContent = scene.speaker;
+    els.speakerEl().style.display = 'block';
+  } else {
+    els.speakerEl().style.display = 'none';
+  }
+
+  // 텍스트 (타이핑 효과)
+  typeText(els.textEl(), scene.text);
+
+  // 선택지 렌더링
+  els.choicesEl().innerHTML = '';
+
+  // 조건부 필터링된 선택지
+  const visibleChoices = scene.choices.filter(c => evaluateCondition(c.condition));
+
+  visibleChoices.forEach((choice, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = choice.text;
+    btn.addEventListener('click', () => handleChoice(ep, scene, choice, idx));
+    els.choicesEl().appendChild(btn);
+  });
+
+  updateDebugPanel();
+}
+
+// ──────────────────────────────────────────────
+// 선택 처리
+// ──────────────────────────────────────────────
+function handleChoice(ep, scene, choice, idx) {
+  // 버튼 비활성화
+  els.choicesEl().querySelectorAll('.choice-btn').forEach(b => b.disabled = true);
+
+  // 즉시 결과 표시
+  if (choice.immediate) {
+    els.immediateEl().textContent = '▶ ' + choice.immediate;
+    els.immediateEl().style.opacity = '1';
+  }
+
+  // 선택 기록
+  gameProgress.choiceHistory.push({
+    episodeId: ep.id,
+    sceneId: scene.id,
+    choiceIndex: idx,
+    choiceText: choice.text,
+  });
+
+  // 효과 적용
+  applyEffects(choice.effects);
+  updateDebugPanel();
+
+  // 다음 장면으로 이동 (짧은 딜레이)
+  const delay = choice.immediate ? 1400 : 400;
+  setTimeout(() => {
+    if (choice.next === 'END_EPISODE') {
+      goToNextEpisode(ep.id);
+    } else {
+      renderScene(ep, choice.next);
+    }
+  }, delay);
+}
+
+// ──────────────────────────────────────────────
+// 다음 에피소드 또는 엔딩
+// ──────────────────────────────────────────────
+function goToNextEpisode(currentEpId) {
+  const idx = EPISODE_ORDER.indexOf(currentEpId);
+  if (idx === -1 || idx >= EPISODE_ORDER.length - 1) {
+    showEnding();
+  } else {
+    const nextEpId = EPISODE_ORDER[idx + 1];
+    goToEpisode(nextEpId, 0);
+  }
+}
+
+// ──────────────────────────────────────────────
+// 엔딩 화면
+// ──────────────────────────────────────────────
+function showEnding() {
+  gameProgress.completed = true;
+  saveGame();
+
+  const { ending, details } = determineEnding({ ...worldState }, { ...flags });
+
+  els.startScreen().style.display = 'none';
+  els.gameScreen().style.display = 'none';
+  els.endingScreen().style.display = 'flex';
+
+  els.endingBar().style.background = ending.color;
+  els.endTitle().textContent = `엔딩 ${ending.id}: ${ending.title}`;
+  els.endSubtitle().textContent = ending.subtitle;
+  els.endSummary().textContent = ending.summary;
+
+  const detailsEl = els.endDetails();
+  detailsEl.innerHTML = '';
+  if (details.length > 0) {
+    const h = document.createElement('h3');
+    h.textContent = '세부 결과';
+    detailsEl.appendChild(h);
+    details.forEach(d => {
+      const p = document.createElement('p');
+      p.textContent = d;
+      detailsEl.appendChild(p);
+    });
+  }
+
+  // 최종 세계 상태 요약
+  const summary = document.createElement('div');
+  summary.className = 'state-final';
+  summary.innerHTML = `<h3>최종 세계 상태</h3>` +
+    Object.entries(worldState).map(([k, v]) => {
+      const label = STATE_LABELS[k] || k;
+      const bar = getBar(v, 5);
+      return `<div class="state-row"><span>${label}</span><span class="state-bar">${bar}</span><span>${v > 0 ? '+' : ''}${v}</span></div>`;
+    }).join('');
+  detailsEl.appendChild(summary);
+}
+
+// ──────────────────────────────────────────────
+// 에피소드 내비게이션 업데이트
+// ──────────────────────────────────────────────
+function updateEpisodeNav(currentEpId) {
+  const nav = els.episodeNav();
+  nav.innerHTML = '';
+  const labels = {
+    prologue: '프롤로그',
+    ep1: 'EP1', ep2: 'EP2', ep3: 'EP3', ep4: 'EP4', ep5: 'EP5',
+  };
+  EPISODE_ORDER.forEach(epId => {
+    const dot = document.createElement('span');
+    dot.className = 'ep-dot' + (epId === currentEpId ? ' active' : '');
+    dot.title = labels[epId];
+    dot.textContent = labels[epId];
+    nav.appendChild(dot);
+  });
+}
+
+// ──────────────────────────────────────────────
+// 디버그 패널
+// ──────────────────────────────────────────────
+const STATE_LABELS = {
+  aiTrust: 'AI 신뢰도', publicAnxiety: '시민 불안',
+  privacyAwareness: '개인정보 민감', victimSolidarity: '피해자 연대',
+  corporatePressure: '기업 압박', governmentControl: '정부 통제',
+  mindAwareness: 'MIND 자의식', evidencePublic: '공개 증거',
+};
+
+const FLAG_LABELS = {
+  studentProtected: '윤서 보호', studentHarmed: '윤서 피해',
+  privacyIssueRaised: '개인정보 제기', schoolCasePublic: '학교사건 공개',
+  hiringBiasExposed: '채용편향 폭로', companyCoverup: '기업 은폐',
+  hiringVictimHelped: '채용피해자 구제', surveillanceExpanded: '감시 확대',
+  citizenCommitteeCreated: '시민위원회', protestSuppressed: '시위 탄압',
+  mindDialogueOpened: 'MIND 대화', mindSelfActionDiscovered: 'MIND 자율 발각',
+  mindDestroyed: 'MIND 폐기',
+};
+
+function getBar(val, max) {
+  const pct = Math.round(((val + max) / (max * 2)) * 10);
+  const filled = Math.max(0, Math.min(10, pct));
+  return '█'.repeat(filled) + '░'.repeat(10 - filled);
+}
+
+function updateDebugPanel() {
+  // 세계 상태
+  els.dbWorld().innerHTML = Object.entries(worldState).map(([k, v]) => {
+    const label = STATE_LABELS[k] || k;
+    const bar = getBar(v, 5);
+    const color = v > 0 ? '#a8e6cf' : v < 0 ? '#ffb3b3' : '#aaa';
+    return `<div class="db-row">
+      <span class="db-label">${label}</span>
+      <span class="db-bar" style="color:${color}">${bar}</span>
+      <span class="db-val" style="color:${color}">${v > 0 ? '+' : ''}${v}</span>
+    </div>`;
+  }).join('');
+
+  // 플래그
+  els.dbFlags().innerHTML = Object.entries(flags).map(([k, v]) => {
+    const label = FLAG_LABELS[k] || k;
+    return `<div class="db-flag ${v ? 'flag-on' : 'flag-off'}">
+      <span>${v ? '✓' : '○'}</span> ${label}
+    </div>`;
+  }).join('');
+
+  // 선택 히스토리
+  const hist = gameProgress.choiceHistory;
+  if (hist.length === 0) {
+    els.dbHistory().innerHTML = '<div style="color:#555; font-size:11px;">아직 선택 없음</div>';
+  } else {
+    els.dbHistory().innerHTML = hist.slice(-8).map(h =>
+      `<div class="db-hist-item">[${h.episodeId}] ${h.choiceText.slice(0, 28)}${h.choiceText.length > 28 ? '…' : ''}</div>`
+    ).join('');
+  }
+}
+
+// ──────────────────────────────────────────────
+// 저장 / 초기화 핸들러
+// ──────────────────────────────────────────────
+function handleSave() {
+  if (saveGame()) {
+    showToast('게임이 저장되었습니다.');
+  }
+}
+
+function handleReset() {
+  if (confirm('정말 초기화하시겠습니까? 모든 진행 상황이 삭제됩니다.')) {
+    resetGame();
+    location.reload();
+  }
+}
+
+// ──────────────────────────────────────────────
+// 디버그 토글
+// ──────────────────────────────────────────────
+function toggleDebug() {
+  const panel = document.getElementById('debug-panel');
+  const isHidden = panel.style.display === 'none' || !panel.style.display;
+  panel.style.display = isHidden ? 'block' : 'none';
+}
+
+// ──────────────────────────────────────────────
+// 유틸리티
+// ──────────────────────────────────────────────
+function typeText(el, text, speed = 18) {
+  el.textContent = '';
+  let i = 0;
+  const timer = setInterval(() => {
+    el.textContent += text[i];
+    i++;
+    if (i >= text.length) clearInterval(timer);
+  }, speed);
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+}
+
+// DOMContentLoaded 후 init 실행
+document.addEventListener('DOMContentLoaded', init);
