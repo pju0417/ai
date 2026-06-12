@@ -1,132 +1,147 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MIND: 존재하지 않는 해커</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+// ============================================================
+// state.js - 전역 세계 상태, 플래그, 저장/불러오기 관리
+// ============================================================
 
-<!-- ────────────────────────────────────────────
-  시작 화면
-────────────────────────────────────────────── -->
-<div id="start-screen">
-  <div class="game-logo">MIND</div>
-  <div class="game-tagline">존재하지 않는 해커</div>
-  <p style="font-size:13px; color:#5a6a8a; max-width:380px; line-height:1.8; text-align:center;">
-    AI 윤리 딜레마 선택형 게임. 당신의 선택이 사회를 만듭니다.
-    해커는 없었다. 그 진실에 다가서십시오.
-  </p>
-  <div class="start-buttons">
-    <button id="btn-new-game" class="btn-start">새 게임 시작</button>
-    <button id="btn-load-game" class="btn-start secondary" disabled>이어하기</button>
-  </div>
-  <div id="load-hint" style="font-size:12px; color:#3a4a6a;">저장 데이터 없음</div>
-  <div class="watermark">made by 박선생</div>
-</div>
+const SAVE_KEY = 'mind_game_save';
 
-<!-- ────────────────────────────────────────────
-  게임 화면
-────────────────────────────────────────────── -->
-<div id="game-wrapper">
+// 전역 세계 상태 (-5 ~ +5 범위 권장)
+const worldState = {
+  aiTrust: 0,           // AI 신뢰도
+  publicAnxiety: 0,     // 시민 불안도
+  privacyAwareness: 0,  // 개인정보 민감도
+  victimSolidarity: 0,  // 피해자 연대
+  corporatePressure: 0, // 기업 압박
+  governmentControl: 0, // 정부 통제 의지
+  mindAwareness: 0,     // MIND의 자기인식
+  evidencePublic: 0,    // 공개된 증거량
+};
 
-  <!-- 배경 레이어 -->
-  <div id="bg-layer"></div>
+// 사건 플래그
+const flags = {
+  studentProtected: false,
+  studentHarmed: false,
+  privacyIssueRaised: false,
+  schoolCasePublic: false,
+  hiringBiasExposed: false,
+  companyCoverup: false,
+  hiringVictimHelped: false,
+  surveillanceExpanded: false,
+  citizenCommitteeCreated: false,
+  protestSuppressed: false,
+  mindDialogueOpened: false,
+  mindSelfActionDiscovered: false,
+  mindDestroyed: false,
+};
 
-  <!-- 좌: 디버그 패널 -->
-  <aside id="debug-panel">
-    <div class="debug-section">
-      <div class="debug-title">세계 상태</div>
-      <div id="db-world"></div>
-    </div>
-    <div class="debug-section">
-      <div class="debug-title">플래그</div>
-      <div id="db-flags"></div>
-    </div>
-    <div class="debug-section">
-      <div class="debug-title">선택 기록</div>
-      <div id="db-history"></div>
-    </div>
-  </aside>
+// 게임 진행 상태
+const gameProgress = {
+  currentEpisode: 'prologue',
+  currentScene: 0,
+  choiceHistory: [], // { episodeId, sceneId, choiceIndex, choiceText }
+  completed: false,
+};
 
-  <!-- 중: 메인 게임 화면 -->
-  <main id="game-screen">
-    <!-- 헤더 -->
-    <div id="game-header">
-      <div id="ep-title">MIND: 존재하지 않는 해커</div>
-      <div id="char-badge">캐릭터</div>
-      <div id="episode-nav"></div>
-    </div>
+// ──────────────────────────────────────────────
+// 효과 적용 함수
+// ──────────────────────────────────────────────
+function applyEffects(effects) {
+  if (!effects) return;
 
-    <!-- 대화 영역 -->
-    <div id="dialogue-area">
-      <div id="dialogue-box">
-        <div id="speaker-name" style="display:none;"></div>
-        <div id="scene-text">게임을 시작하는 중...</div>
-      </div>
-      <div id="immediate-result"></div>
-      <div id="choices"></div>
-    </div>
+  // worldState 수치 변화
+  if (effects.world) {
+    for (const [key, delta] of Object.entries(effects.world)) {
+      if (worldState.hasOwnProperty(key)) {
+        worldState[key] += delta;
+      }
+    }
+  }
 
-    <!-- 컨트롤 -->
-    <div id="game-controls">
-      <button class="ctrl-btn" id="btn-save">💾 저장</button>
-      <button class="ctrl-btn" id="btn-reset">↺ 초기화</button>
-      <button class="ctrl-btn" id="btn-toggle-debug">🔍 상태 패널</button>
-    </div>
-  </main>
+  // 플래그 설정
+  if (effects.flags) {
+    for (const [key, value] of Object.entries(effects.flags)) {
+      if (flags.hasOwnProperty(key)) {
+        flags[key] = value;
+      }
+    }
+  }
+}
 
-  <!-- 우: 사이드 패널 -->
-  <aside id="side-panel">
-    <div class="side-title">MIND 모니터링</div>
-    <div class="mind-log">
-      [ SYSTEM ACTIVE ]<br>
-      Monitoring: ON<br>
-      Human choices: tracking<br>
-      Pattern analysis: running<br>
-      Ethics override: pending<br>
-      .<br>
-      .<br>
-      I am watching.
-    </div>
-    <div class="side-title" style="margin-top:8px;">플레이 안내</div>
-    <div class="side-hint">
-      · 모든 선택은 세계 상태와 플래그를 바꿉니다.<br>
-      · 이전 선택이 나중 장면의 선택지를 열거나 닫습니다.<br>
-      · 진실은 마지막 에피소드에서 드러납니다.<br><br>
-      🔍 상태 패널 버튼으로 현재 세계 상태를 확인하세요.
-    </div>
-  </aside>
+// ──────────────────────────────────────────────
+// 조건 평가 함수 (선택지 해금 여부 판단)
+// ──────────────────────────────────────────────
+function evaluateCondition(condition) {
+  if (!condition) return true;
 
-</div>
+  // 플래그 조건: { flag: 'studentProtected', is: true }
+  if (condition.flag !== undefined) {
+    return flags[condition.flag] === condition.is;
+  }
 
-<!-- ────────────────────────────────────────────
-  엔딩 화면
-────────────────────────────────────────────── -->
-<div id="ending-screen">
-  <div id="ending-color-bar"></div>
-  <div class="ending-content">
-    <div id="ending-title">엔딩 제목</div>
-    <div id="ending-subtitle">부제</div>
-    <div id="ending-summary">요약</div>
-    <div id="ending-details"></div>
-    <button id="btn-restart">처음부터 다시하기</button>
-    <div class="watermark" style="position:static; text-align:center; margin-top:8px;">made by 박선생</div>
-  </div>
-</div>
+  // 수치 조건: { world: 'aiTrust', gte: 2 }
+  if (condition.world !== undefined) {
+    const val = worldState[condition.world];
+    if (condition.gte !== undefined) return val >= condition.gte;
+    if (condition.lte !== undefined) return val <= condition.lte;
+    if (condition.eq !== undefined) return val === condition.eq;
+  }
 
-<!-- 토스트 -->
-<div id="toast"></div>
+  return true;
+}
 
-<!-- 스크립트 로드 순서 중요: state → episodes → ending → main -->
-<script src="src/state.js"></script>
-<script src="src/episodes.js"></script>
-<script src="src/ending.js"></script>
-<script src="src/main.js"></script>
+// ──────────────────────────────────────────────
+// 저장 / 불러오기 / 초기화
+// ──────────────────────────────────────────────
+function saveGame() {
+  const data = {
+    worldState: { ...worldState },
+    flags: { ...flags },
+    gameProgress: JSON.parse(JSON.stringify(gameProgress)),
+    savedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  return true;
+}
 
-</body>
-</html>
+function loadGame() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return false;
+
+  try {
+    const data = JSON.parse(raw);
+
+    Object.assign(worldState, data.worldState);
+    Object.assign(flags, data.flags);
+    Object.assign(gameProgress, data.gameProgress);
+    return true;
+  } catch (e) {
+    console.error('저장 데이터 불러오기 실패:', e);
+    return false;
+  }
+}
+
+function resetGame() {
+  // worldState 초기화
+  for (const key of Object.keys(worldState)) worldState[key] = 0;
+
+  // flags 초기화
+  for (const key of Object.keys(flags)) flags[key] = false;
+
+  // 진행 초기화
+  gameProgress.currentEpisode = 'prologue';
+  gameProgress.currentScene = 0;
+  gameProgress.choiceHistory = [];
+  gameProgress.completed = false;
+
+  localStorage.removeItem(SAVE_KEY);
+}
+
+// ──────────────────────────────────────────────
+// 디버그 패널용 스냅샷
+// ──────────────────────────────────────────────
+function getStateSnapshot() {
+  return {
+    world: { ...worldState },
+    flags: { ...flags },
+    progress: { ...gameProgress },
+  };
+}
