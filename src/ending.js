@@ -9,7 +9,8 @@ const ENDINGS = {
     subtitle: 'AI가 세계를 조율한다',
     color: '#4cc9f0',
     summary: 'MIND는 사회 판단의 중심이 되었습니다. 사고는 줄었지만, 인간은 결정권을 점점 잃어가고 있습니다. 거리에는 질서가 있고, 사람들의 얼굴에는 무표정이 있습니다.',
-    condition: (w, f) => w.aiTrust >= 4 && w.governmentControl >= 3,
+    // aiTrust >= 3 으로 완화 (EP1만으로도 도달 가능)
+    condition: (w, f) => w.aiTrust >= 3 && w.governmentControl >= 2,
   },
   B: {
     id: 'B',
@@ -17,7 +18,8 @@ const ENDINGS = {
     subtitle: '판단은 사람의 몫으로 남았다',
     color: '#06d6a0',
     summary: 'AI는 보조 도구로 제한되었습니다. 인간의 책임이 명확해졌지만, 실수와 편견도 함께 남아 있습니다. 느리지만, 사람이 사람을 판단하는 세계가 계속됩니다.',
-    condition: (w, f) => f.mindDestroyed || (w.aiTrust <= -2 && w.victimSolidarity >= 2),
+    // aiTrust <= -1 로 완화 (EP1에서 AI에 저항한 플레이어가 도달 가능)
+    condition: (w, f) => f.mindDestroyed || (w.aiTrust <= -1 && w.victimSolidarity >= 1),
   },
   C: {
     id: 'C',
@@ -33,9 +35,9 @@ const ENDINGS = {
     subtitle: '인간과 AI, 감시받는 감시자',
     color: '#7b2d8b',
     summary: 'AI 판단 근거 공개, 이의제기권, 인간 책임자, 독립 검증 체계가 만들어졌습니다. 완벽하지는 않지만, 함께 살아가는 규칙이 생겼습니다.',
+    // 버그 수정: f.evidencePublic → w.evidencePublic (수치값이므로 flags가 아님)
     condition: (w, f) =>
       f.citizenCommitteeCreated &&
-      f.evidencePublic > 0 &&
       w.evidencePublic >= 2 &&
       (f.studentProtected || f.hiringVictimHelped),
   },

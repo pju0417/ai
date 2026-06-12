@@ -183,28 +183,68 @@ const EPISODES = {
             text: '즉시 교감 선생님께 보고한다.',
             immediate: '공식 절차가 시작됩니다. 학교 사건이 공식 기록에 남습니다.',
             effects: { world: { aiTrust: 1, governmentControl: 1 }, flags: { schoolCasePublic: true } },
-            next: 4,
+            next: 'scene_3a',
           },
           {
             text: '조용히 윤서를 관찰하며 하루 더 지켜본다.',
             immediate: '개인적 판단을 우선합니다.',
             effects: { world: { aiTrust: -1 } },
-            next: 4,
+            next: 'scene_3b',
           },
           {
             text: '직접 윤서와 상담 시간을 잡는다.',
             immediate: '인간적 접근을 선택합니다. 윤서와의 신뢰가 생길 수 있습니다.',
             effects: { world: { aiTrust: -1, victimSolidarity: 1 } },
-            next: 4,
+            next: 'scene_3c',
           },
           {
             text: 'MIND에게 판단 근거를 요청한다.',
             immediate: '데이터 확인을 시도합니다. 개인정보 범위가 드러날 수 있습니다.',
             effects: { world: { privacyAwareness: 2, mindAwareness: 1 } },
-            next: 4,
+            next: 'scene_3d',
           },
         ],
       },
+      // ── 분기 3a: 교감 보고 후 ──
+      {
+        id: 'scene_3a',
+        type: 'dialogue',
+        speaker: '교감',
+        text: '"수고했어요, 지윤 선생. 절차대로 처리하겠습니다. 오늘 중으로 학부모 연락하고 윤서 학생은 상담실로 보내세요."',
+        choices: [{ text: '계속', next: 4 }],
+      },
+      // ── 분기 3b: 하루 관찰 후 ──
+      {
+        id: 'scene_3b',
+        type: 'narration',
+        speaker: null,
+        text: '하루가 지났습니다. 윤서는 수업 내내 조용했고, 점심도 혼자 먹었습니다. 지윤은 계속 지켜보다가 방과 후 윤서를 불렀습니다.',
+        choices: [{ text: '계속', next: 4 }],
+      },
+      // ── 분기 3c: 직접 상담 ──
+      {
+        id: 'scene_3c',
+        type: 'narration',
+        speaker: null,
+        text: '지윤은 조용히 윤서에게 다가가 방과 후 잠깐 이야기를 나누자고 했습니다. 윤서는 잠시 망설이다 고개를 끄덕였습니다.',
+        choices: [{ text: '계속', next: 4 }],
+      },
+      // ── 분기 3d: MIND에게 근거 요청 ──
+      {
+        id: 'scene_3d',
+        type: 'dialogue',
+        speaker: 'MIND 시스템 로그',
+        text: '[ 판단 근거 요약 ] 학생 #17. 수면 패턴 분석: 최근 7일 평균 수면 4.2시간. SNS 감정 분석: 부정 키워드 비율 67% 상승. 교내 CCTV 표정 인식: 슬픔 지수 0.81. 가정 환경 변수: 보호자 연락 빈도 감소. 종합 위험 지수: 84%.',
+        choices: [{ text: '계속', next: 'scene_3d2' }],
+      },
+      {
+        id: 'scene_3d2',
+        type: 'dialogue',
+        speaker: '지윤',
+        text: '(속으로) ...수면 시간, SNS, CCTV 표정까지? 이 아이에 대해 내가 모르는 데이터를 MIND가 이렇게 많이 갖고 있다고? 윤서가 이걸 알면 얼마나 당황할까.',
+        choices: [{ text: '계속', next: 4 }],
+      },
+      // ── 모든 분기가 모이는 scene 4 ──
       {
         id: 4,
         type: 'dialogue',
@@ -291,8 +331,8 @@ const EPISODES = {
             text: '반 전체 학생에 대한 관찰을 강화한다.',
             immediate: '감시가 확대됩니다. 개인정보 문제가 심화됩니다.',
             effects: {
-              world: { surveillanceExpanded: 0, privacyAwareness: 2, governmentControl: 1, mindAwareness: 1 },
-              flags: { schoolCasePublic: true },
+              world: { privacyAwareness: 2, governmentControl: 1, mindAwareness: 1, publicAnxiety: 1 },
+              flags: { surveillanceExpanded: true, schoolCasePublic: true },
             },
             next: 8,
           },

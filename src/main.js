@@ -78,7 +78,8 @@ function loadAndStart() {
 
 function showGameScreen() {
   els.startScreen().style.display = 'none';
-  els.gameScreen().style.display = 'grid';
+  els.gameScreen().style.display = 'grid';       // #game-wrapper
+  document.getElementById('game-screen').style.display = 'flex'; // #game-screen
   els.endingScreen().style.display = 'none';
 }
 
@@ -111,11 +112,14 @@ function goToEpisode(epId, sceneIndex = 0) {
 // ──────────────────────────────────────────────
 // 장면 렌더링
 // ──────────────────────────────────────────────
-function renderScene(ep, sceneIndex) {
-  const scene = ep.scenes[sceneIndex];
+function renderScene(ep, sceneRef) {
+  // sceneRef가 숫자면 배열 인덱스, 문자열이면 id 탐색
+  const scene = typeof sceneRef === 'number'
+    ? ep.scenes[sceneRef]
+    : ep.scenes.find(s => s.id === sceneRef);
   if (!scene) return;
 
-  gameProgress.currentScene = sceneIndex;
+  gameProgress.currentScene = scene.id;
 
   // 즉시 결과 초기화
   els.immediateEl().textContent = '';
@@ -129,10 +133,28 @@ function renderScene(ep, sceneIndex) {
     els.speakerEl().style.display = 'none';
   }
 
-  // 텍스트 (타이핑 효과)
-  typeText(els.textEl(), scene.text);
+  // 선택지 영역 비우고 숨김 (타이핑 완료 전까지)
+  els.choicesEl().innerHTML = '';
 
-  // 선택지 렌더링
+  // 타이핑 완료 후 선택지 표시
+  const timer = typeText(els.textEl(), scene.text, 18, () => {
+    showChoices(ep, scene);
+  });
+
+  // 대화창 클릭 시 타이핑 즉시 완료
+  const dialogueBox = document.getElementById('dialogue-box');
+  const skipHandler = () => {
+    clearInterval(timer);
+    els.textEl().textContent = scene.text;
+    showChoices(ep, scene);
+    dialogueBox.removeEventListener('click', skipHandler);
+  };
+  dialogueBox.addEventListener('click', skipHandler);
+
+  updateDebugPanel();
+}
+
+function showChoices(ep, scene) {
   els.choicesEl().innerHTML = '';
 
   // 조건부 필터링된 선택지
@@ -145,8 +167,6 @@ function renderScene(ep, sceneIndex) {
     btn.addEventListener('click', () => handleChoice(ep, scene, choice, idx));
     els.choicesEl().appendChild(btn);
   });
-
-  updateDebugPanel();
 }
 
 // ──────────────────────────────────────────────
@@ -209,6 +229,7 @@ function showEnding() {
 
   els.startScreen().style.display = 'none';
   els.gameScreen().style.display = 'none';
+  document.getElementById('game-screen').style.display = 'none';
   els.endingScreen().style.display = 'flex';
 
   els.endingBar().style.background = ending.color;
@@ -346,14 +367,19 @@ function toggleDebug() {
 // ──────────────────────────────────────────────
 // 유틸리티
 // ──────────────────────────────────────────────
-function typeText(el, text, speed = 18) {
+function typeText(el, text, speed = 18, onDone) {
   el.textContent = '';
   let i = 0;
   const timer = setInterval(() => {
     el.textContent += text[i];
     i++;
-    if (i >= text.length) clearInterval(timer);
+    if (i >= text.length) {
+      clearInterval(timer);
+      if (onDone) onDone();
+    }
   }, speed);
+  // 타이머 참조 반환 (외부에서 즉시 완료 가능하도록)
+  return timer;
 }
 
 function showToast(msg) {
